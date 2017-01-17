@@ -43,9 +43,9 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
     IBOutlet NSView *vals, *sliders, *maxs, *wells;
     IBOutlet NSImageView *imageWell;
 
-    int clientSocket, patchNumber, fdin, fdout, fdfile, lines, status, lastFlags;
+    int clientSocket, patchNumber, fdin, fdout, fdfile, lines, status, lastFlags; //io相关参数
     NSMutableString *output;
-    char buffer[1024*1024];
+    char buffer[1024*1024]; //1M
     FILE *scriptOutput;
     BOOL autoOpened;
 }
@@ -63,10 +63,11 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
 
 @end
 
-#define RESOURCES_LINK "/tmp/injectionforxcode"
+#define RESOURCES_LINK "/tmp/injectionforxcode"  //资源链接？？？
 
 @implementation INPluginClientController
 
+//从xib或者storyboard加载完毕就会调用
 - (void)awakeFromNib {
     NSUserDefaults *defaults = menuController.defaults;
     if ( [defaults valueForKey:kINUnlockCommand] )
@@ -84,10 +85,10 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
 //        self.resourcePath = self.scriptPath;
     self.resourcePath = @RESOURCES_LINK;
 
-    unlink( RESOURCES_LINK );
-    symlink( [self.scriptPath UTF8String], RESOURCES_LINK );
+    unlink( RESOURCES_LINK ); //删除参数指定的文件
+    symlink( [self.scriptPath UTF8String], RESOURCES_LINK ); //建立一个RESOURCES_LINK（新）与self.scriptPath（旧）的链接
 
-    [self logRTF:@"{\\rtf1\\ansi\\def0}\n"];
+    [self logRTF:@"{\\rtf1\\ansi\\def0}\n"];  //RTF：富文本格式 https://en.wikipedia.org/wiki/Rich_Text_Format
     self.sourceFiles = [NSMutableDictionary new];
 }
 
@@ -132,6 +133,9 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
     [output appendFormat:@"{%@\\line}\n", rtf];
 }
 
+/**
+ *  输出到信息面板
+ */
 - (void)completeRTF:(NSString *)out {
     NSString *rtf = out ? out : output;
     if ( ![rtf length] )
@@ -164,14 +168,28 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
     [self performSelectorOnMainThread:@selector(logRTF:) withObject:text waitUntilDone:YES];
 }
 
+/**
+ *  解析颜色值
+ *
+ *  @param info 颜色值（字符串）
+ *
+ *  @return color对象
+ */
 - (NSColor *)parseColor:(NSString *)info {
     if ( !info )
         return nil;
     float r, g, b, a;
-    sscanf( [info UTF8String], [colorFormat UTF8String], &r, &g, &b, &a );
+    sscanf( [info UTF8String], [colorFormat UTF8String], &r, &g, &b, &a ); //按格式读取颜色值
     return [NSColor colorWithDeviceRed:r green:g blue:b alpha:a];
 }
 
+/**
+ *  格式化颜色值
+ *
+ *  @param color color对象
+ *
+ *  @return 颜色值（字符串）
+ */
 - (NSString *)formatColor:(NSColor *)color {
     CGFloat r=1., g=1., b=1., a=1.;
     @try {
@@ -186,13 +204,20 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
 
 #pragma mark - Accept connection
 
+/**
+ *  服务器接收到socket链接
+ *
+ *  @param appConnection socket文件描述符
+ */
 - (void)setConnection:(int)appConnection {
     struct _in_header header;
-    char path[PATH_MAX];
+    char path[PATH_MAX]; //路径大小,而且不初始化？？？
 
+    //读取header???
     [BundleInjection readHeader:&header forPath:path from:appConnection];
 
     if ( header.dataLength == INJECTION_MAGIC )
+        //给mainSourceLabel设置???
         [mainSourceLabel
          performSelectorOnMainThread:@selector(setStringValue:)
          withObject:self.mainFilePath = [NSString stringWithUTF8String:path]
@@ -201,7 +226,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
         self.identity = [NSString stringWithUTF8String:path];
 
         path[0] = '@';
-        path[header.dataLength+1] = '\000';
+        path[header.dataLength+1] = '\000'; //这里强行置零?
         read( appConnection, path+1, header.dataLength );
         self.productPath = [NSString stringWithUTF8String:path+1];
 
@@ -213,7 +238,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
     }
 
     status = (storyButton.state ? INJECTION_STORYBOARD : 1) | INJECTION_DEVICEIOS8;
-    write( appConnection, &status, sizeof status );
+    write( appConnection, &status, sizeof status ); //回写状态？
 
     [BundleInjection readHeader:&header forPath:path from:appConnection];
     self.executablePath = [NSString stringWithUTF8String:path];
@@ -270,6 +295,9 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
     [menuController enableFileWatcher:NO];
 }
 
+/**
+ *  连接保活，随便写点数据保活？10秒一次？
+ */
 - (void)connectionKeepalive {
     if ( clientSocket && !scriptOutput ) {
         [BundleInjection writeBytes:INJECTION_MAGIC withPath:"" from:0 to:clientSocket];
@@ -300,6 +328,9 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
     [self completeRTF:nil];
 }
 
+/**
+ *  模拟器则？？？
+ */
 - (void)mapSimulator {
     if ( frontButton.state &&
         ([self.executablePath rangeOfString:@"/iPhone Simulator/"].location != NSNotFound ||
@@ -309,6 +340,9 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
              menuController.xcodeApp]]];
 }
 
+/**
+ *  判断是都是连接状态
+ */
 - (BOOL)connected {
     return clientSocket > 0;
 }
@@ -316,7 +350,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
 #pragma mark - Run script
 
 - (void)runScript:(NSString *)script withArg:(NSString *)selectedFile {
-    [menuController startProgress];
+    [menuController startProgress]; //启动进度条
     if ( ![selectedFile length] )
         [self.consolePanel orderFront:self];
 
@@ -347,6 +381,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
         [consoleTextView setSelectedRange:NSMakeRange(length, 0)];
 
     INLog( @"Running: %@", command );
+    //如果正在有脚本执行，则延迟0.5s后再执行本函数
     if ( scriptOutput ) {
         [self performSelector:_cmd withObject:command afterDelay:.5];
         return;
@@ -354,6 +389,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
 
     lines = 0, status = 0;
     scriptOutput = (FILE *)1;
+    //通过创建一个管道，调用fork 产生一个子进程执行命令
     if ( (scriptOutput = popen( [command UTF8String], "r")) == NULL )
         [menuController error:@"Could not run script: %@", command];
     else
@@ -364,6 +400,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
     char *file = &buffer[1];
 
     while ( scriptOutput && fgets( buffer, sizeof buffer-1, scriptOutput ) ) {
+        //设置进度条
         [menuController performSelectorOnMainThread:@selector(setProgress:)
                                 withObject:[NSNumber numberWithFloat:lines++/50.]
                              waitUntilDone:NO];
@@ -441,11 +478,12 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
                 [consoleTextView performSelectorOnMainThread:@selector(insertText:) withObject:as2 waitUntilDone:YES];
                 break;
             }
-           case '?':
+           case '?': //错误的脚本代码
                 NSLog( @"Error from script: %s", file );
                 [menuController error:@"%s", file];
                 break;
             default:
+                //默认就是进行日志输出？
                 [self scriptText:[NSString stringWithUTF8String:buffer]];
                 break;
         }
@@ -454,6 +492,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
     [menuController performSelectorOnMainThread:@selector(setProgress:)
                             withObject:[NSNumber numberWithFloat:-1.] waitUntilDone:NO];
 
+    //输出完毕，关闭管道？
     status = pclose( scriptOutput )>>8;
     if ( status )
         NSLog( @"Status: %d", status );
@@ -510,6 +549,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
     [self mapSimulator];
 }
 
+//打开某个源文件
 - (void)openResource:(const char *)res {
     [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:[NSString stringWithFormat:@"%@/%s", self.scriptPath, res]]];
 }
@@ -544,6 +584,9 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
 
 #pragma mark Console
 
+/**
+ *  清除信息面板内容
+ */
 - (void)clearConsole: (id)sender {
     consoleTextView.string = @"";
 }

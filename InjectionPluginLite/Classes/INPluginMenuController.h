@@ -26,25 +26,25 @@
 @class INPluginClientController;
 @interface INPluginMenuController : NSObject <NSApplicationDelegate>
 
-@property (nonatomic,retain) IBOutlet NSButton *watchButton;
-@property (nonatomic,retain) IBOutlet INPluginClientController *client;
-@property (nonatomic,retain) NSMutableDictionary<NSString *,NSDate *> *lastInjected;
-@property (nonatomic,retain) NSString *lastFile;
+@property (nonatomic,retain) IBOutlet NSButton *watchButton;                             //启动文件监测功能按钮
+@property (nonatomic,retain) IBOutlet INPluginClientController *client;                  //客户端对象？？？
+@property (nonatomic,retain) NSMutableDictionary<NSString *,NSDate *> *lastInjected;     //最后注入代码文件字典，文件名为key，最后注入时间为value
+@property (nonatomic,retain) NSString *lastFile;                                         //最后修改文件？
 
-- (NSUserDefaults *)defaults;
-- (NSArray *)serverAddresses;
-- (NSString *)workspacePath;
+- (NSUserDefaults *)defaults;  //默认设置项
+- (NSArray *)serverAddresses;  //服务器地址列表
+- (NSString *)workspacePath;   //工作区目录路径
 
-- (void)error:(NSString *)format, ...;
-- (void)enableFileWatcher:(BOOL)enabled;
-- (IBAction)watchChanged:sender;
+- (void)error:(NSString *)format, ...;     //输出错误信息
+- (void)enableFileWatcher:(BOOL)enabled;   //启动/禁用文件检测功能
+- (IBAction)watchChanged:sender;           //文件监测功能按钮响应方法
 
-- (void)startProgress;
-- (void)setProgress:(NSNumber *)fraction;
+- (void)startProgress;                     //启动进度条，注入代码右上角有个进度条
+- (void)setProgress:(NSNumber *)fraction;  //设置状态条进度
 
-- (NSString *)buildDirectory;
-- (NSString *)logDirectory;
-- (NSString *)xcodeApp;
+- (NSString *)buildDirectory;  //构建目录
+- (NSString *)logDirectory;    //日志目录
+- (NSString *)xcodeApp;        //？？？
 
 @end
 

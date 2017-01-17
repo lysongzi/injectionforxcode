@@ -27,17 +27,17 @@
 
 @interface INPluginClientController : NSObject
 
-@property (nonatomic,retain) IBOutlet NSPanel *consolePanel;
-@property (nonatomic,retain) IBOutlet NSPanel *paramsPanel;
+@property (nonatomic,retain) IBOutlet NSPanel *consolePanel;     //相关信息输出面板
+@property (nonatomic,retain) IBOutlet NSPanel *paramsPanel;      //参数面板
 
-@property (nonatomic,retain) NSMutableDictionary *sourceFiles;
-@property (nonatomic,retain) NSString *scriptPath;
-@property (nonatomic) BOOL withReset;
+@property (nonatomic,retain) NSMutableDictionary *sourceFiles;   //源文件
+@property (nonatomic,retain) NSString *scriptPath;               //脚本路径?
+@property (nonatomic) BOOL withReset;                            //是否重置？
 
 - (void)alert:(NSString *)msg;
-- (void)setConnection:(int)clientConnection;
-- (void)runScript:(NSString *)script withArg:(NSString *)selectedFile;
-- (void)writeString:(NSString *)string;
-- (BOOL)connected;
+- (void)setConnection:(int)clientConnection;                     //接受socket连接
+- (void)runScript:(NSString *)script withArg:(NSString *)selectedFile;  //执行脚本
+- (void)writeString:(NSString *)string;                                 //写啥数据呢？
+- (BOOL)connected;                                                      //判断是否是连接状态？
 
 @end

@@ -34,6 +34,10 @@
 
 static NSString *kINShortcut = @"INShortcut", *kINFileWatch = @"INFileWatch";
 
+/**
+ *  LLDB调试器会话对象
+ *  详细参见：https://github.com/luisobo/Xcode-RuntimeHeaders/blob/master/DebuggerLLDB/DBGLLDBSession.h
+ */
 @interface DBGLLDBSession : NSObject
 - (void)requestPause;
 - (void)requestContinue;
@@ -50,14 +54,14 @@ INPluginMenuController *injectionPlugin;
     IBOutlet WebView *webView;
     NSMenuItem *menuItem;
 
-    Class IDEWorkspaceWindowController;
-    Class DVTSourceTextView;
-    Class IDEWorkspaceDocument;
-    Class IDEConsoleTextView;
+    Class IDEWorkspaceWindowController; //其中有个属性：IDEEditorArea
+    Class DVTSourceTextView;            //代码编辑器的view？
+    Class IDEWorkspaceDocument;         //工程目录？
+    Class IDEConsoleTextView;           //debug中的console界面view
 
-    int serverSocket;
+    int serverSocket;                   //服务器socket描述符
 
-    NSTimeInterval lastChanged;
+    NSTimeInterval lastChanged;         //最后一次修改时间
     int skipLastSaved;
     time_t installed;
     int licensed;
@@ -83,6 +87,7 @@ INPluginMenuController *injectionPlugin;
 
 #pragma mark - Plugin Initialization
 
+//插件加载时会调用该方法
 + (void)pluginDidLoad:(NSBundle *)plugin {
     if ([[NSBundle mainBundle].infoDictionary[@"CFBundleName"] isEqual:@"Xcode"]) {
         static dispatch_once_t onceToken;
@@ -96,10 +101,12 @@ INPluginMenuController *injectionPlugin;
     }
 }
 
+//执行注入的代码
 + (void)evalCode:(NSString *)code {
+    //客户端没有连接
     if( !injectionPlugin.client.connected )
         [injectionPlugin error:@"Injection has not connected, please restart app"];
-    else
+    else //执行注入的代码
         [injectionPlugin.client runScript:@"evalCode.pl" withArg:code];
 }
 
@@ -112,10 +119,12 @@ INPluginMenuController *injectionPlugin;
         return NO;
 }
 
+//获取类对应文件名？
 + (NSString *)sourceForClass:(NSString *)className {
     return injectionPlugin.client.sourceFiles[className];
 }
 
+//显示参数面板?
 + (void)showParams {
     [injectionPlugin.client.paramsPanel makeKeyAndOrderFront:self];
 }
@@ -124,6 +133,7 @@ INPluginMenuController *injectionPlugin;
     return [self loadXprobe:resourcePath];
 }
 
+//输出错误信息
 - (void)error:(NSString *)format, ... {
     va_list argp;
     va_start(argp, format);
@@ -133,8 +143,10 @@ INPluginMenuController *injectionPlugin;
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
+    //获取Product菜单项下的子菜单按钮
     NSMenu *productMenu = [[[NSApp mainMenu] itemWithTitle:@"Product"] submenu];
     if ( !productMenu && notification == nil ) {
+        //延迟1秒后重试？
         [self performSelector:@selector(applicationDidFinishLaunching:) withObject:notification afterDelay:1.0];
         return;
     }
@@ -144,6 +156,7 @@ INPluginMenuController *injectionPlugin;
     DVTSourceTextView = NSClassFromString(@"DVTSourceTextView");
     IDEConsoleTextView = NSClassFromString(@"IDEConsoleTextView");
 
+    //加载nib文件
     if ( ![NSBundle loadNibNamed:@"INPluginMenuController" owner:self] )
         if ( [[NSAlert alertWithMessageText:@"Injection Plugin:"
                               defaultButton:@"OK" alternateButton:@"Goto GitHub" otherButton:nil
@@ -162,6 +175,7 @@ INPluginMenuController *injectionPlugin;
     if ( [self.defaults valueForKey:kINFileWatch] )
         self.watchButton.state = [self.defaults boolForKey:kINFileWatch];
 
+    //添加一个按钮项
     [productMenu addItem:[NSMenuItem separatorItem]];
 
     struct { const char *item,  *key; SEL action; } items[] = {
@@ -182,6 +196,7 @@ INPluginMenuController *injectionPlugin;
     }
 
     introItem.title = [NSString stringWithFormat:@"Injection v%s Intro", INJECTION_VERSION];
+    //注册通知，当某个window成为key windows时会收到通知
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(workspaceDidChange:)
                                                  name:NSWindowDidBecomeKeyNotification object:nil];
@@ -224,6 +239,7 @@ INPluginMenuController *injectionPlugin;
 
 #pragma mark - Text Selection Handling
 
+//工作区某个文件被选中（感觉是监听当前在编辑的文件）
 - (void)workspaceDidChange:(NSNotification *)notification {
     NSWindow *object = [notification object];
     NSWindowController *currentWindowController = [object windowController];
@@ -236,10 +252,12 @@ INPluginMenuController *injectionPlugin;
     return [self.lastKeyWindow windowController];
 }
 
+//获取编辑区
 - (id)lastEditor {
     return [[self lastController] valueForKeyPath:@"editorArea.lastActiveEditorContext.editor"];
 }
 
+//获取编辑区中的输入区？
 - (NSTextView *)lastTextView {
     id currentEditor = [self lastEditor];
     if ( [currentEditor respondsToSelector:@selector(textView)] )
@@ -275,10 +293,12 @@ INPluginMenuController *injectionPlugin;
     return [source rangeOfString:string].location != NSNotFound;
 }
 
+//构建目录
 - (NSString *)buildDirectory {
     return [self.lastTextView valueForKeyPath:@"window.delegate.workspace.executionEnvironment.workspaceArena.buildFolderPath.pathString"];
 }
 
+//日志目录
 - (NSString *)logDirectory {
     return [self.lastController valueForKeyPath:@"workspace.executionEnvironment.logStore.rootDirectoryPath"];
 }
@@ -335,13 +355,16 @@ static NSString *kAppHome = @"http://injection.johnholdsworth.com/",
 - (IBAction)support:sender {
     [self openURL:@"mailto:injection@johnholdsworth.com?subject=Injection%20Feedback"];
 }
-                  
+
+//列出设备列表
 - (IBAction)listDevice:sender {
     [self.client runScript:@"listDevice.pl" withArg:@""];
 }
+//patch工程
 - (IBAction)patchProject:sender {
     [self.client runScript:@"patchProject.pl" withArg:@""];
 }
+//revert工程
 - (IBAction)revertProject:sender {
     [self.client runScript:@"revertProject.pl" withArg:@""];
 }
@@ -349,6 +372,7 @@ static NSString *kAppHome = @"http://injection.johnholdsworth.com/",
     [self.client runScript:@"openBundle.pl" withArg:[self lastFileSaving:YES]];
 }
 
+//获取LLDB会话对象
 - (DBGLLDBSession *)sessionForController:(NSWindowController *)controller {
     return [controller valueForKeyPath:@"workspace"
             ".executionEnvironment.selectedLaunchSession.currentDebugSession"];
@@ -373,10 +397,12 @@ static NSString *kAppHome = @"http://injection.johnholdsworth.com/",
     return [self sessionForController:[self debugController]];
 }
 
+//注入代码源文件
 - (IBAction)injectSource:(id)sender {
     if ( [sender isKindOfClass:[NSMenuItem class]] || [sender isKindOfClass:[NSButton class]] )
         self.lastFile = [self lastFileSaving:YES];
 
+    //获取LLDB会话
     DBGLLDBSession *session = [self session];
     //NSLog( @"injectSource: %@ %@", sender, session );
     if ( !session && !sender ) {
@@ -391,37 +417,44 @@ static NSString *kAppHome = @"http://injection.johnholdsworth.com/",
 //         "Make sure that text is selected and the cursor is inside the file you have edited."];
         return;
     }
+    //判断文件后缀
     else if ( [self.lastFile rangeOfString:@"\\.(mm?|swift|storyboard)$"
                                    options:NSRegularExpressionSearch].location == NSNotFound )
         [self.client alert:@"Only class implementations (.m, .mm, .swift or .storyboard files) can be injected."];
+    //main.mm不可注入
     else if ( [self.lastFile rangeOfString:@"/main\\.mm?$"
                                    options:NSRegularExpressionSearch].location != NSNotFound )
         [self.client alert:@"You can not inject main.m"];
+    //没保存则延迟注入？
     else if ( !self.hasSaved ) {
         [self performSelector:@selector(injectSource:) withObject:self afterDelay:.01];
         return;
     }
+    //未选中工程
     else if ( ![self workspacePath] )
         [self.client alert:@"No project selected. Make sure the project you are working on is the \"Key Window\"."];
+    //判断是否有客户端连入
     else if ( !self.client.connected ) {
 
-        // "unpatched" injection
+        // "unpatched" injection 是指需要引入一些代码，以便app支持和plugin进行tcp通信
         if ( sender ) {
             self.lastKeyWindow = [self.lastTextView window];
             [session requestPause];
             [self performSelector:@selector(loadBundle:) withObject:session afterDelay:.005];
         }
         else
+            // 没有客户端链接则0.1s后重新注入？
             [self performSelector:@selector(injectSource:) withObject:nil afterDelay:.1];
     }
     else {
-        [self.client runScript:@"injectSource.pl" withArg:self.lastFile];
-        self.lastInjected[self.lastFile] = [NSDate new];
+        [self.client runScript:@"injectSource.pl" withArg:self.lastFile]; //执行脚本注入源文件
+        self.lastInjected[self.lastFile] = [NSDate new]; //记录某个文件最后被注入时间？
         self.lastFile = nil;
-        [self enableFileWatcher:YES];
+        [self enableFileWatcher:YES]; //启动检测器，检测文件内容是否有改动
     }
 }
 
+//在debugger中执行一下代码
 - (void)loadBundle:(DBGLLDBSession *)session {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND,0), ^{
         NSString *loader = [NSString stringWithFormat:@"expr -l objc++ -O -- "
@@ -435,6 +468,7 @@ static NSString *kAppHome = @"http://injection.johnholdsworth.com/",
     });
 }
 
+//注入和重置应用
 - (IBAction)injectWithReset:(id)sender {
     self.client.withReset = YES;
     [self injectSource:sender];
@@ -443,7 +477,7 @@ static NSString *kAppHome = @"http://injection.johnholdsworth.com/",
 - (void)enableFileWatcher:(BOOL)enabled {
     [self.docTile
      performSelectorOnMainThread:@selector(setBadgeLabel:)
-     withObject:enabled?@"1":nil waitUntilDone:NO];
+     withObject:enabled?@"1":nil waitUntilDone:NO]; //设置dock图标中的数字
 
     if ( enabled && self.watchButton.state ) {
         if ( !self.fileWatcher ) {
@@ -457,10 +491,13 @@ static NSString *kAppHome = @"http://injection.johnholdsworth.com/",
 
             NSString *projectRoot = [[workspacePath substringWithRange:range] stringByDeletingLastPathComponent];
             INJECTION_RELEASE( self.fileWatcher = [[FileWatcher alloc] initWithRoot:projectRoot plugin:^( NSArray *filesChanged ) {
+                //检测到文件变化的处理
                 NSString *filePath = filesChanged[0];
                 NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
                 NSTimeInterval timeSinceLifeLastInjected = self.lastInjected[filePath] ?
                     now - self.lastInjected[filePath].timeIntervalSinceReferenceDate : 1000.;
+                //1.距离上一个文件修改至少要大于1.5s才更新一次；
+                //2.同一个文件修改要大于1.5s才更新一次；
                 if ( --skipLastSaved < 0 && now - lastChanged > MIN_CHANGE_INTERVAL &&
                     timeSinceLifeLastInjected > MIN_CHANGE_INTERVAL ) {
                     self.lastFile = filePath;
@@ -477,33 +514,38 @@ static NSString *kAppHome = @"http://injection.johnholdsworth.com/",
 
 #pragma mark - Injection Service
 
+//这一段好像就是为了获取mac地址而已。。。
 static CFDataRef copy_mac_address(void)
 {
 	kern_return_t			 kernResult;
-	mach_port_t			   master_port;
-	CFMutableDictionaryRef	matchingDict;
+	mach_port_t			     master_port;
+	CFMutableDictionaryRef	 matchingDict;
 	io_iterator_t			 iterator;
-	io_object_t			   service;
+	io_object_t			     service;
 	CFDataRef				 macAddress = nil;
 
+    //获取一个用于通信的mac port
 	kernResult = IOMasterPort(MACH_PORT_NULL, &master_port);
 	if (kernResult != KERN_SUCCESS) {
 		printf("IOMasterPort returned %d\n", kernResult);
 		return nil;
 	}
 
+    //理解为创建一个名称绑定一个io服务（mach port表示）
 	matchingDict = IOBSDNameMatching(master_port, 0, "en0");
 	if(!matchingDict) {
 		printf("IOBSDNameMatching returned empty dictionary\n");
 		return nil;
 	}
 
+    //查找符合条件的已绑定的服务对象
 	kernResult = IOServiceGetMatchingServices(master_port, matchingDict, &iterator);
 	if (kernResult != KERN_SUCCESS) {
 		printf("IOServiceGetMatchingServices returned %d\n", kernResult);
 		return nil;
 	}
 
+    //迭代处理这些对象
 	while((service = IOIteratorNext(iterator)) != 0)
 	{
 		io_object_t		parentService;
@@ -535,6 +577,7 @@ static CFDataRef copy_mac_address(void)
     return _bonjourName;
 }
 
+//启动一个tcp服务
 - (void)startServer {
     struct sockaddr_in serverAddr;
 
@@ -542,18 +585,19 @@ static CFDataRef copy_mac_address(void)
 #define INJECTION_ADDR INADDR_ANY
 #endif
 
-    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_family = AF_INET;  //tcp协议族
     serverAddr.sin_addr.s_addr = htonl(INJECTION_ADDR);
-    serverAddr.sin_port = htons(INJECTION_PORT);
+    serverAddr.sin_port = htons(INJECTION_PORT);  //31442
 
     int optval = 1;
+    //创建socket
     if ( (serverSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0 )
         [self error:@"Could not open service socket: %s", strerror( errno )];
     else if ( fcntl(serverSocket, F_SETFD, FD_CLOEXEC) < 0 )
         [self error:@"Could not set close exec: %s", strerror( errno )];
     else if ( setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval) < 0 )
         [self error:@"Could not set socket option: %s", strerror( errno )];
-    else if ( setsockopt( serverSocket, IPPROTO_TCP, TCP_NODELAY, (void *)&optval, sizeof(optval)) < 0 )
+    else if ( setsockopt(serverSocket, IPPROTO_TCP, TCP_NODELAY, (void *)&optval, sizeof(optval)) < 0 )
         [self error:@"Could not set socket option: %s", strerror( errno )];
     else if ( bind( serverSocket, (struct sockaddr *)&serverAddr, sizeof serverAddr ) < 0 )
         [self error:@"Could not bind service socket: %s. "
@@ -564,6 +608,7 @@ static CFDataRef copy_mac_address(void)
         [self performSelectorInBackground:@selector(backgroundConnectionService) withObject:nil];
 }
 
+//后台进行网络连接
 - (void)backgroundConnectionService {
 
     NSNetService *netService = [[NSNetService alloc] initWithDomain:@"" type:[self bonjourName]
@@ -583,7 +628,7 @@ static CFDataRef copy_mac_address(void)
             [self.client setConnection:appConnection];
         }
         else
-            [NSThread sleepForTimeInterval:.5];
+            [NSThread sleepForTimeInterval:.5]; //无连接，则没0.5秒检测一次
     }
 }
 
