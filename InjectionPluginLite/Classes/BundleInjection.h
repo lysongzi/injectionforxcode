@@ -152,13 +152,27 @@ struct _in_header { int pathLength, dataLength; };
 
 @implementation BundleInjection
 
+/**
+ *  读数据
+ *
+ *  @param header struct _in_header { int pathLength, dataLength; };
+ *  @param path   一个不知道啥数据？
+ *  @param fdin   输入文件描述符
+ *
+ *  @return 读取数据字节数
+ */
 + (BOOL)readHeader:(struct _in_header *)header forPath:(char *)path from:(int)fdin {
     int hdrsize = sizeof  *header;
-    struct { void *ptr; int *length; } expected[] = {
+    struct { void *ptr; int *length; } expected[] = { //这个类型：struct { void *ptr; int *length; } 变量的指针和变量大小？
         {header, &hdrsize},
         {path, &header->pathLength}};
+    //分别读取header 和 path两坨数据
     for ( unsigned i=0 ; i<sizeof expected/sizeof expected[0] && expected[i].length ; i++ ) {
         int length = *expected[i].length;
+        //param 1: 文件描述符
+        //param 2: 读取的数据的缓冲区
+        //param 3: 需要读取的字节数
+        //return: 成功返回读取字节数；出错返回-1；已是文件文件末尾返回0
         int bytes = (int)read( fdin, expected[i].ptr, length );
         if ( bytes != length ) {
             NSLog( @"%s: Read error %d != %d", INJECTION_APPNAME, (int)bytes, length );
@@ -168,19 +182,31 @@ struct _in_header { int pathLength, dataLength; };
     return true;
 }
 
+/**
+ *  写数据
+ *
+ *  @param bytes 写出的字节数据
+ *  @param path  一个不知道啥数据？
+ *  @param fdin  输入文件描述符
+ *  @param fdout 输出文件描述符
+ *
+ *  @return 写出数据字节数
+ */
 + (BOOL)writeBytes:(off_t)bytes withPath:(const char *)path from:(int)fdin to:(int)fdout {
     BOOL ok = TRUE;
     if ( path ) {
         struct _in_header header;
-        header.pathLength = (int)strlen( path )+1;
-        header.dataLength = (int)bytes;
+        header.pathLength = (int)strlen( path )+1; //path数据大小
+        header.dataLength = (int)bytes;            //data数据大小
         ok = ok && write( fdout, &header, sizeof header ) == sizeof header &&
             write( fdout, path, header.pathLength ) == header.pathLength;
     }
 
-    char buffer[8*1024];
+    char buffer[8*1024]; //8k
     while ( ok && bytes > 0 && fdin ) {
+        //这又读入啥到bytes中
         ssize_t rc = read( fdin, buffer, (int)MIN( sizeof buffer, (unsigned long)bytes ) );
+        //读到这玩意又写回去？？
         ok = ok && rc > 0 && fdout > 0 ? write( fdout, buffer, rc ) == rc : TRUE;
         bytes -= rc;
     }
@@ -205,7 +231,7 @@ static int status, sbInjection;
 static int multicastSocket;
 static BOOL injectAndReset;
 
-#ifndef ANDROID
+#ifndef ANDROID //不是安卓
 static NSNetServiceBrowser *browser;
 static NSNetService *service;
 
@@ -290,11 +316,13 @@ static NSNetService *service;
         addr.sin_addr.s_addr=inet_addr(INJECTION_MULTICAST);
         addr.sin_port=htons(INJECTION_PORT);
 
-        if ( (multicastSocket=socket(AF_INET,SOCK_DGRAM,0)) < 0 )
+        if ( (multicastSocket=socket(AF_INET,SOCK_DGRAM,0)) < 0 ) //创建数据包连接？UDP?
             NSLog( @"%s: Could not get mutlicast socket: %s", INJECTION_APPNAME, strerror(errno) );
         else {
+            //在子线程执行接受？
             [self performSelectorInBackground:@selector(multicastResponse) withObject:nil];
 
+            //UDP不用连接 可直接发送数据包
             if (sendto( multicastSocket, firstAddress+1, strlen(firstAddress+1), 0,
                        (struct sockaddr *) &addr, sizeof(addr) ) < 0)
                 NSLog( @"%s: Could not send mutlicast ping: %s", INJECTION_APPNAME, strerror(errno) );
@@ -323,31 +351,32 @@ static NSNetService *service;
             strcpy( end, ent->d_name );
             lstat( file, &st );
 
-            if ( S_ISDIR( st.st_mode ) && !S_ISLNK( st.st_mode ) && ent->d_name[0] != '.' ) 
+            if ( S_ISDIR( st.st_mode ) && !S_ISLNK( st.st_mode ) && ent->d_name[0] != '.' ) //目录，不是链接，不是隐藏文件？则递归
                 [self listDirectory:start ending:end + strlen(end) into:listing];
-            else if ( strcmp( ent->d_name, ".." ) != 0 )
+            else if ( strcmp( ent->d_name, ".." ) != 0 ) //不是..表示上级目录,则添加到列表里..
                 [listing appendFormat:@"%d\t%d\t%s\n", (int)st.st_size, st.st_mode, start];
         }
         closedir( d );
     }
 }
 
-
+//socket连接
 + (int)connectTo:(const char *)ipAddress {
     struct sockaddr_in loaderAddr;
 
     loaderAddr.sin_family = AF_INET;
+    //将字符ip转化为32的网络序列ip地址
 	inet_aton( ipAddress, &loaderAddr.sin_addr );
-	loaderAddr.sin_port = htons(INJECTION_PORT);
+	loaderAddr.sin_port = htons(INJECTION_PORT); //31442
 
     INLog( @"%s attempting connection to: %s:%d", INJECTION_APPNAME, ipAddress, INJECTION_PORT );
 
     int loaderSocket, optval = 1;
-    if ( (loaderSocket = socket(loaderAddr.sin_family, SOCK_STREAM, 0)) < 0 )
+    if ( (loaderSocket = socket(loaderAddr.sin_family, SOCK_STREAM, 0)) < 0 ) //创建一个数据流socket
         NSLog( @"%s: Could not open socket for injection: %s", INJECTION_APPNAME, strerror( errno ) );
-    else if ( setsockopt( loaderSocket, IPPROTO_TCP, TCP_NODELAY, (void *)&optval, sizeof(optval)) < 0 )
+    else if ( setsockopt( loaderSocket, IPPROTO_TCP, TCP_NODELAY, (void *)&optval, sizeof(optval)) < 0 )//设置socket自动维持连接的时间？
         NSLog( @"%s: Could not set TCP_NODELAY: %s", INJECTION_APPNAME, strerror( errno ) );
-    else if ( connect( loaderSocket, (struct sockaddr *)&loaderAddr, sizeof loaderAddr ) >= 0 )
+    else if ( connect( loaderSocket, (struct sockaddr *)&loaderAddr, sizeof loaderAddr ) >= 0 ) //进行socket连接
         return loaderSocket;
 
     INLog( @"%s: Could not connect: %s", INJECTION_APPNAME, strerror( errno ) );
@@ -361,6 +390,9 @@ static const char **addrPtr, *connectedAddress;
     return connectedAddress;
 }
 
+/**
+ *  bundle加载方法！！！
+ */
 + (void)bundleLoader {
 #ifndef INJECTION_ISARC
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
@@ -381,18 +413,20 @@ static const char **addrPtr, *connectedAddress;
                 INParameters[i] = 1.;
         }
 
-       static char machine[64];
+        static char machine[64];
         if ( machine[0] )
             return;
 
+        //获取设备版本号？？？
         size_t size = sizeof machine;
         sysctlbyname("hw.machine", machine, &size, NULL, 0);
         machine[size] = '\000';
 
         const char *localOnly[] = {"127.0.0.1", NULL},
-            **addrSwitch = strcmp( machine, "x86_64" ) == 0 ? localOnly : _inIPAddresses;
+            **addrSwitch = strcmp( machine, "x86_64" ) == 0 ? localOnly : _inIPAddresses; //马丹，这两个有区别???
 
 #ifndef ANDROID
+        //获取cpu架构？
         const struct mach_header *m_header = _dyld_get_image_header(0);
         const NXArchInfo *info = NXGetArchInfoFromCpuType(m_header->cputype, m_header->cpusubtype);
         const char *arch = info->name;
@@ -405,21 +439,22 @@ static const char **addrPtr, *connectedAddress;
         size_t alen = strlen(arch)+1;
 
         int i;
-        for ( i = 0 ; i < 3 ; i++ ) {
+        for ( i = 0 ; i < 3 ; i++ ) { //尝试加载三次？？？
             int loaderSocket = 0;
 
             for ( addrPtr = addrSwitch ; *addrPtr;  addrPtr++ )
-                if ( (loaderSocket = [self connectTo:*addrPtr]) )
+                if ( (loaderSocket = [self connectTo:*addrPtr]) ) //实际上连接127.0.0.1,连接成功就break了
                     break;
 
-            if ( !loaderSocket ) {
+            if ( !loaderSocket ) { //加载失败则延迟1秒后重试？
                 [NSThread sleepForTimeInterval:1.];
                 continue;
             }
 
+            //_inMainFilePath表示的是BundleContents.m的文件路径？
             [self writeBytes:INJECTION_MAGIC withPath:_inMainFilePath from:0 to:loaderSocket];
 
-            read( loaderSocket, &status, sizeof status );
+            read( loaderSocket, &status, sizeof status ); //然后读取返回的一个int表示状态码的玩意？
             if ( !status ) {
                 NSLog( @"Unable to locate main file \"%s\", re-patch it in Xcode and rebuild your application.",
                       _inMainFilePath );

@@ -45,7 +45,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
 
     int clientSocket, patchNumber, fdin, fdout, fdfile, lines, status, lastFlags; //io相关参数
     NSMutableString *output;
-    char buffer[1024*1024]; //1M
+    char buffer[1024*1024]; //1M 数据缓冲区？
     FILE *scriptOutput;
     BOOL autoOpened;
 }
@@ -361,6 +361,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
         flags |= INJECTION_FLAGCHANGE;
     lastFlags = flags & ~INJECTION_FLAGCHANGE;
 
+    //这个是脚本的模板？前两个参数表示了要执行的脚本，后面都是要传入的参数？
     NSString *command = [NSString stringWithFormat:@"\"%@/%@\" "
                          "\"%@\" \"%@\" \"%@\" \"%@\" \"%@\" %d %d \"%@\" \"%@\" \"%@\" \"%@\" \"%@\" \"%@\" 2>&1",
                          self.scriptPath, script, self.resourcePath, menuController.workspacePath,
@@ -389,16 +390,20 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
 
     lines = 0, status = 0;
     scriptOutput = (FILE *)1;
-    //通过创建一个管道，调用fork 产生一个子进程执行命令
+    
+    //通过创建一个io管道, 会调用fork()产生子进程,然后从子进程中调用/bin/sh -c 来执行参数command的指令
+    //"r"表示读取，"w"表示写入。依照type值，popen()会建立管道到子进程的标准输入或输出设备，然后返回一个文件指针。随后进程便可利用此文件指针来读写数据。
     if ( (scriptOutput = popen( [command UTF8String], "r")) == NULL )
         [menuController error:@"Could not run script: %@", command];
     else
-        [self performSelectorInBackground:@selector(monitorScript) withObject:nil];
+        [self performSelectorInBackground:@selector(monitorScript) withObject:nil]; //检测脚本执行的输出结果？
 }
 
 - (void)monitorScript {
-    char *file = &buffer[1];
+    char *file = &buffer[1]; //表示数据缓冲区第二个字节起的数据
 
+    //fgets():从scriptOutput所指的文件内读入字符，并存到参数buffer所指的内存空间，直到出现换行符、读到文件尾或是已经读了(sizeof buffer-2)个字符为止
+    //最后还会加上NULL作为字符串结束
     while ( scriptOutput && fgets( buffer, sizeof buffer-1, scriptOutput ) ) {
         //设置进度条
         [menuController performSelectorOnMainThread:@selector(setProgress:)
@@ -409,12 +414,12 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
         buffer[strlen(buffer)-1] = '\000';
 
         switch ( buffer[0] ) {
-            case '<': {
-                if ( (fdin = open( file, O_RDONLY )) < 0 )
+            case '<': {//发送一个被请求的文件或目录
+                if ( (fdin = open( file, O_RDONLY )) < 0 ) //只读形式打开发送过来的文件名？
                     NSLog( @"Could not open input file: \"%s\" as: %s", file, strerror( errno ) );
                 if ( fdout ) {
                     struct stat fdinfo;
-                    if ( fstat( fdin, &fdinfo ) != 0 )
+                    if ( fstat( fdin, &fdinfo ) != 0 ) //获取打开的文件信息？
                         NSLog( @"Could not stat \"%s\" as: %s", file, strerror( errno ) );
                     [BundleInjection writeBytes:fdinfo.st_size withPath:NULL from:fdin to:fdout];
                     close( fdout );
@@ -422,7 +427,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
                 }
             }
                 break;
-            case '>':
+            case '>'://接受一个文件或目录
                 while ( fdout )
                     [NSThread sleepForTimeInterval:.5];
                 if ( (fdout = open( file, O_CREAT|O_TRUNC|O_WRONLY, 0644 )) < 0 )
@@ -441,7 +446,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
                             break;
                         }
                     case '<':
-                    case '/':
+                    case '/'://加载bundle
                     case '@':
                     case '!':
                         if ( self.connected ) {
@@ -470,7 +475,7 @@ static NSString *kINUnlockCommand = @"INUnlockCommand", *kINSilent = @"INSilent"
                         break;
                 }
                 break;
-            case '%': {
+            case '%': {//输出log?
                 NSDictionary *attr = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithInt:NSUTF8StringEncoding], NSCharacterEncodingDocumentAttribute, nil];
                 NSAttributedString *as2 = [[NSAttributedString alloc]
                                            initWithHTML:[NSData dataWithBytes:file length:strlen(file)]

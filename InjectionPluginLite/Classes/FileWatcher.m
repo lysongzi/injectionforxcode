@@ -9,7 +9,7 @@
 #import "FileWatcher.h"
 
 @implementation FileWatcher {
-    FSEventStreamRef fileEvents;
+    FSEventStreamRef fileEvents; //文件事件流
 }
 
 static void fileCallback( ConstFSEventStreamRef streamRef,
@@ -47,6 +47,7 @@ static void fileCallback( ConstFSEventStreamRef streamRef,
     NSMutableSet *changed = [NSMutableSet new];
 
     for ( NSString *path in changes )
+        //过滤一下是不是支持的文件类型
         if ( [path rangeOfString:INJECTABLE_PATTERN
                          options:NSRegularExpressionSearch].location != NSNotFound &&
             [path rangeOfString:@"DerivedData/|InjectionProject/|main.mm?$"

@@ -84,11 +84,13 @@ NSString *utf8String( const char *chars ) {
 static int xstrncmp( const char *str1, const char *str2 ) {
     return strncmp( str1, str2, strlen( str2 ) );
 }
+//比较两个字符串，第三个参数为要比较的字符数目
 #else
 #define xstrncmp( _str1, _str2 ) strncmp( _str1, _str2, sizeof _str2 - 1 )
 #endif
 
 static const char *isOOType( const char *type ) {
+    //strstr():判断参数二是否是参数一的字串
     return strncmp( type, "{OO", 3 ) == 0 ? strstr( type, "\"ref\"" ) : NULL;
 }
 

@@ -104,6 +104,7 @@ static NSMutableArray *sharedInstances;
 + (void)bsweep {
 }
 
+//what do you want to do ???
 - (void)bsweep {
 //    bsweep( self );
 //}
@@ -114,26 +115,26 @@ static NSMutableArray *sharedInstances;
     if ( [bundleInjection instancesSeen][key] )
         return;
 
-    [bundleInjection instancesSeen][key] = @"1";
+    [bundleInjection instancesSeen][key] = @"1";//@(1)??
 
-    Class aClass = object_getClass(self);
-    NSString *className = NSStringFromClass(aClass);
+    Class aClass = object_getClass(self);  //类对象
+    NSString *className = NSStringFromClass(aClass);  //类名
     if ( [className characterAtIndex:1] == '_' || [className hasPrefix:@"UITransition"] )
         return;
     else
-        [[bundleInjection liveInstances] addObject:self];
+        [[bundleInjection liveInstances] addObject:self]; //实例列表里添加这种类
 
     //printf("BundleSweeper sweep <%s %p>\n", [className UTF8String], self);
 
-    for ( ; aClass && aClass != [NSObject class] ; aClass = class_getSuperclass(aClass) ) {
+    for ( ; aClass && aClass != [NSObject class] ; aClass = class_getSuperclass(aClass) ) { //向上递归到根类NSObject
         unsigned ic;
-        Ivar *ivars = class_copyIvarList(aClass, &ic);
-        const char *currentClassName = class_getName(aClass), firstChar = currentClassName[0];
+        Ivar *ivars = class_copyIvarList(aClass, &ic); //获取参数列表
+        const char *currentClassName = class_getName(aClass), firstChar = currentClassName[0]; //获取类名和第一个字符？
 
         if ( firstChar != '_' && !(firstChar == 'N' && currentClassName[1] == 'S') &&
             strncmp( currentClassName, "RAC", 3 ) != 0 ) // uses unsafe_unretained
             for ( unsigned i=0 ; i<ic ; i++ ) {
-                __unused const char *currentIvarName = ivar_getName(ivars[i]);
+                __unused const char *currentIvarName = ivar_getName(ivars[i]); //获取成员变量名
                 const char *type = ivar_getTypeEncodingSwift( ivars[i], aClass );
                 if ( type && (type[0] == '@' || isSwiftObject( type )) ) {
                     id subObject = xvalueForIvarType( self, ivars[i], type, aClass );
