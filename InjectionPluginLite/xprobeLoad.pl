@@ -17,16 +17,16 @@ use common;
 my $xprobePath = $selectedFile;
 my $bundlePath = ($isIOS ? $isDevice ? "Device" : "Sim" : "OSX")."Bundle.loader";
 
-if ( !$isIOS ) {
+if ( !$isIOS ) { # OSX系统
     my $newBundle = "$appPackage/$patchNumber$productName.loader";
     system "cp -r '$xprobePath/$bundlePath' '$newBundle'";
     $bundlePath = $newBundle;
 }
-elsif ( $isDevice ) {
+elsif ( $isDevice ) { # 真机设备
     print "Copying $bundlePath to device..\n";
     $bundlePath = copyToDevice( "$xprobePath/$bundlePath", "$deviceRoot/tmp/$patchNumber$bundlePath" );
 }
-else {
+else { # 模拟器?
     $bundlePath = "$xprobePath/$bundlePath";
 }
 

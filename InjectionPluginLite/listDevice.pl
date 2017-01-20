@@ -27,6 +27,7 @@ print "!<$deviceRoot\n";
 # -f是否普通文件，-z文件存在，检测是否大小为0
 sleep 1 while !-f $lstmp || -z $lstmp;
 
+# split方法把字符串按照一定格式进行分割，返回一个列表
 foreach my $line ( split "\n", loadFile( $lstmp ) ) {
     my ($size, $mode, $file) = split "\t", $line;
     $file =~ s@(.)\.$@$1@ if ($mode & 0170000) == 0040000;
@@ -35,6 +36,7 @@ foreach my $line ( split "\n", loadFile( $lstmp ) ) {
     
     my ($dir,$name) = $file =~ m@^(.*/|)([^/]+)$@;
     
+    # 拼接一行的信息
     $html .= sprintf "<tr><td align=right nowrap>%7d<td align=right nowrap>%6o<td>%s", $size, $mode,
         !$name ? $file :
         "$dir<a href='urlPrefix&lt;$deviceRoot/$dir/$name'>$name$type</a>";
