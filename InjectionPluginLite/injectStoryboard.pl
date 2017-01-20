@@ -14,6 +14,7 @@ use FindBin;
 use lib $FindBin::Bin;
 use common;
 
+# 这个是被选择的文件路径？
 my $appBundle = $selectedFile;
 
 if ( $isDevice ) {

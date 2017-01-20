@@ -161,16 +161,21 @@ sub unique {
 }
 
 sub copyToDevice {
+    # 获取参数
+    # 比如注入nib文件时pattern是用于判断是否nib文件
     my ($from,$to,$pattern) = @_;
 
     print "Uploading '$from' to device...\n";
     print "<$from\n";
     print "!>$to\n";
 
+    # 定位到该目录下，并列出该目录下的所有文件?
     my $files = IO::File->new( "cd \"$from\" && find . -print |" )
         or error "Could not find: $from";
     while ( my $file = <$files> ) {
         chomp $file;
+        # 判断该文件是否目录，或者该文件是否符合正则匹配
+        # 则输出文件
         if ( -d "$from/$file" || !$pattern || $file =~ /$pattern/ ) {
             #print "\\i1Copying $file\n";
             print "<$from/$file\n";

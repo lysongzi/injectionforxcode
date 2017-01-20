@@ -14,4 +14,5 @@ use FindBin;
 use lib $FindBin::Bin;
 use common;
 
+#执行shell脚本打开文件
 system "open \"$InjectionBundle/InjectionBundle.xcodeproj\"";

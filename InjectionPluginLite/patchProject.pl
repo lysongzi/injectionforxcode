@@ -14,9 +14,12 @@ use FindBin;
 use lib $FindBin::Bin;
 use common;
 
+#@表示列表
+#grep函数接受一个array，然后返回一个经过筛选的array。==.不知道筛选结果是啥
 my @ip4Addresses = grep $_ !~ /:/, split " ", $addresses;
-shift @ip4Addresses; # bonjour address seems unreliable
+shift @ip4Addresses; # bonjour address seems unreliable, 为啥又从队列头部弹出这玩意。。
 
+#%是哈希表
 my %ipPrecedence = (
     10 => 2,
     192 => 1,
@@ -25,18 +28,22 @@ my %ipPrecedence = (
     127 => -9,
 );
 
+# 这是一个方法，$_[0]是传入的第一个参数
+# =~是"dont match"的意思，正则表达判断是不是
 sub prec {
     my ($network) = $_[0] =~ /^(\d+)\./;
-    return $ipPrecedence{$network} || 0;
+    return $ipPrecedence{$network} || 0; #ipPrecedence{$network}根据键取对应的值？？？
 }
 
+# ip地址排序
+# <=>表示比较大小，返回0-1，0，1
 @ip4Addresses = sort { prec($b) <=> prec($a) } @ip4Addresses;
 
 my $key = "// From here to end of file added by Injection Plugin //";
 my $ifdef = $projName =~ /UICatalog|(iOS|OSX)GLEssentials/ ?
     "__OBJC__ // would normally be DEBUG" : "DEBUG";
 
-
+# 输出信息 \b表示单词边界？
 print "\\b Patching project contained in: $projRoot\n";
 
 ###################################################################################################
@@ -57,11 +64,14 @@ print "\\b Patching project contained in: $projRoot\n";
 #    } );
 #}
 
-$ifdef .= "\n#define INJECTION_PORT $selectedFile" if $isAppCode || $selectedFile;
+# .= 操作有点是像 += 字符串连接。。。
+$ifdef .= "\n#define INJECTION_PORT $selectedFile" if $isAppCode || $selectedFile; # if条件成立则做那个赋值操作
 
 ###################################################################################################
 # patch normal Xcode projects
+# linux shell 脚本？ !-d 表示不是目录？所以-d是表示判断是不是目录?
 if ( !-d "$projRoot$projName.approj" ) {
+    #执行这个patch方法
     patchAll( "\./main.(m|mm)", sub {
         $_[0] =~ s/\n*($key.*)?$/<<CODE/es;
 

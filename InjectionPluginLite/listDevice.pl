@@ -24,6 +24,7 @@ print "Listing: $deviceRoot\n";
 print ">$lstmp\n";
 print "!<$deviceRoot\n";
 
+# -f是否普通文件，-z文件存在，检测是否大小为0
 sleep 1 while !-f $lstmp || -z $lstmp;
 
 foreach my $line ( split "\n", loadFile( $lstmp ) ) {

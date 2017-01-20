@@ -197,16 +197,17 @@ struct _in_header { int pathLength, dataLength; };
     if ( path ) {
         struct _in_header header;
         header.pathLength = (int)strlen( path )+1; //path数据大小
-        header.dataLength = (int)bytes;            //data数据大小
+        header.dataLength = (int)bytes;            //bytes转int???
         ok = ok && write( fdout, &header, sizeof header ) == sizeof header &&
             write( fdout, path, header.pathLength ) == header.pathLength;
     }
 
+    //这里是为了直接从fdin读数据写到fdout?
     char buffer[8*1024]; //8k
     while ( ok && bytes > 0 && fdin ) {
         //这又读入啥到bytes中
         ssize_t rc = read( fdin, buffer, (int)MIN( sizeof buffer, (unsigned long)bytes ) );
-        //读到这玩意又写回去？？
+        //返回已读取的字节数吧..
         ok = ok && rc > 0 && fdout > 0 ? write( fdout, buffer, rc ) == rc : TRUE;
         bytes -= rc;
     }
@@ -471,19 +472,22 @@ static const char **addrPtr, *connectedAddress;
 #endif
 
 #if TARGET_OS_IPHONE
-            if ( status & INJECTION_DEVICEIOS8 ) {
+            if ( status & INJECTION_DEVICEIOS8 ) { //ios8要发送executablePath？？？
 #endif
                 NSString *executablePath = [[NSBundle mainBundle] executablePath];
+                //executablePath转化为C类型的字符串赋值给path
                 [executablePath getCString:path maxLength:sizeof path encoding:NSUTF8StringEncoding];
                 [self writeBytes:0 withPath:path from:0 to:loaderSocket];
 #if TARGET_OS_IPHONE
             }
 #endif
 
+            //设备根目录
             NSString *deviceRoot = NSHomeDirectory();
             [deviceRoot getCString:path maxLength:sizeof path encoding:NSUTF8StringEncoding];
+            //为啥要先写一个alen长度和path过去。。
             [self writeBytes:alen withPath:path from:0 to:loaderSocket];
-
+            //然后这里再把alen数据写过去。。。
             write(loaderSocket, arch, alen);
 
             INLog( @"Connected to \"%s\" plugin, ready to load %s code.", INJECTION_APPNAME, arch );
@@ -491,6 +495,7 @@ static const char **addrPtr, *connectedAddress;
 
             int fdout = 0;
             struct _in_header header;
+            //开始接收数据？？？
             while ( [self readHeader:&header forPath:path from:loaderSocket] ) {
                 if ( !path[0] && header.dataLength == INJECTION_MAGIC )
                     continue; // WiFi keepalive
@@ -534,16 +539,18 @@ static const char **addrPtr, *connectedAddress;
 
                     case '>': // open file/directory to write/create
                         if ( header.dataLength == INJECTION_NOFILE ) {
-                            if ( (fdout = open( file, O_CREAT|O_TRUNC|O_WRONLY, 0755 )) < 0 )
+                            if ( (fdout = open( file, O_CREAT|O_TRUNC|O_WRONLY, 0755 )) < 0 ) //不存在文件则以新建方式打开文件
                                 NSLog( @"Could not open \"%s\" for copy as: %s", file, strerror(errno) );
                         }
-                        else if ( header.dataLength == INJECTION_MKDIR ) {
+                        else if ( header.dataLength == INJECTION_MKDIR ) { //创建目录?
                             if ( mkdir( file, 0777 ) && errno != EEXIST )
                                 NSLog( @"Could not mkdir \"%s\" for copy as: %s", file, strerror(errno) );
                         }
                         else {
                             if ( (fdout = open( file, O_CREAT|O_TRUNC|O_WRONLY, 0755 )) < 0 )
                                 NSLog( @"Could not open \"%s\" for download as: %s", file, strerror(errno) );
+                            //往文件里写了啥？反正是把loaderSocket的东西写到文件里
+                            //这时候的header.dataLength是需要写的数据长度吧
                             [self writeBytes:header.dataLength withPath:NULL from:loaderSocket to:fdout];
                             close( fdout );
                             fdout = 0;
@@ -551,28 +558,29 @@ static const char **addrPtr, *connectedAddress;
                         break;
 
                     case '<': { // open file/directory to read/list
-                        int fdin = open( file, O_RDONLY );
+                        int fdin = open( file, O_RDONLY ); //只读方式打开文件
                         struct stat fdinfo;
 
-                        memset( &fdinfo, '\000', sizeof fdinfo );
+                        memset( &fdinfo, '\000', sizeof fdinfo ); //初始化fdinfo
 
                         if ( fdin < 0 )
                             NSLog( @"Could not open \"%s\" for reading as: %s", file, strerror(errno) );
-                        else if ( fstat( fdin, &fdinfo ) < 0 )
+                        else if ( fstat( fdin, &fdinfo ) < 0 ) //获取文件信息?
                             NSLog( @"Could not stat \"%s\" for reading as: %s", file, strerror(errno) );
 
-                        if ( S_ISDIR( fdinfo.st_mode ) ) {
+                        if ( S_ISDIR( fdinfo.st_mode ) ) {//是目录
                             NSMutableString *listing = [[NSMutableString alloc] init];
                             NSLog( @"Listing directory: %s", file );
                             close( fdin );
 
                             char *end = file+strlen(file);
-                            [self listDirectory:end+1 ending:end into:listing];
+                            [self listDirectory:end+1 ending:end into:listing]; //列出所有的目录？
 
                             ssize_t len = (size_t)[listing lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
                             char *data = (char *)malloc( len+1 );
                             [listing getCString:data maxLength:len+1 encoding:NSUTF8StringEncoding];
 
+                            //发送这个目录列表
                             len = strlen( data );
                             write( loaderSocket, &len, sizeof len );
                             if ( write( loaderSocket, data, len ) != len )
@@ -582,13 +590,14 @@ static const char **addrPtr, *connectedAddress;
                             [listing release];
 #endif
                         }
-                        else if ( fdout ) {
+                        else if ( fdout ) { //拷贝诺干字节到文件file。。。
                             INLog( @"Copying %d bytes to \"%s\"", (int)fdinfo.st_size, file );
                             [self writeBytes:fdinfo.st_size withPath:NULL from:fdin to:fdout];
                             close( fdout );
                             fdout = 0;
                         }
                         else {
+                            //读取诺干字节数输出到socket连接中...
                             INLog( @"Uploading %d bytes from \"%s\"", (int)fdinfo.st_size, file );
                             int bytes = (int)fdinfo.st_size;
                             write( loaderSocket, &bytes, sizeof &bytes );
@@ -598,9 +607,9 @@ static const char **addrPtr, *connectedAddress;
                     }
                         break;
 
-                    case '#': { // update image
+                    case '#': { // update image 更新图片？？？
                         int len, block = 4096;
-                        read( loaderSocket, &len, sizeof len );
+                        read( loaderSocket, &len, sizeof len ); //先读取图片长度？
                         char *buff = (char *)malloc( len );
                         int j;
                         for ( j=0 ; j<len ; )
@@ -623,11 +632,11 @@ static const char **addrPtr, *connectedAddress;
                     }
                         break;
 
-                    case '!': // log message to console window
+                    case '!': // log message to console window 日志输出？
                         printf( "%s\n", file );
                         break;
 
-                    default: // parameter or color value update
+                    default: // parameter or color value update //参数或者颜色值更新
                         if ( isdigit(path[0]) ) {
                             int tag = path[0]-'0';
                             static BOOL logValue;
@@ -713,7 +722,7 @@ static const char **addrPtr, *connectedAddress;
 }
 
 + (void)loadDylib {
-    if ( !dlopen( path+1, RTLD_NOW ) )
+    if ( !dlopen( path+1, RTLD_NOW ) ) //加载动态库？？？
         NSLog( @"Could not initalise dylib at \"%s\"", path+1 );
     else
         ;//INLog( @"Injecting Bundle: %s", path );
